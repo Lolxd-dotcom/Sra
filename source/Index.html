@@ -7,8 +7,7 @@
 <style>
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f2f2f2;
+  font-family: sans-serif;
 }
 
 #app {
@@ -25,69 +24,99 @@ button {
   padding: 12px;
   font-size: 16px;
 }
+
+.clock {
+  font-size: 26px;
+  font-weight: bold;
+}
 </style>
 </head>
 <body>
 
-<div id="app">Loading Demo.sra…</div>
+<div id="app">Loading SRA…</div>
 
 <script>
-// ==========================
-// SRA HTML RUNTIME
-// ==========================
-
-// 🔗 CONNECTED FILE
-const SRA_FILE = "Demo.sra";
-
-// LOAD THE SRA FILE
-fetch(SRA_FILE)
-  .then(response => response.text())
-  .then(sraText => {
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(sraText, "text/xml");
-
-    // Set app title
-    const appName = xml.querySelector("app > name");
-    if (appName) document.title = appName.textContent;
-
-    const screen = xml.querySelector("screen");
-    const root = document.getElementById("app");
-    root.innerHTML = "";
-
-    render(screen, root);
-  })
-  .catch(error => {
-    document.getElementById("app").textContent =
-      "Error: Could not load Demo.sra";
+// ===== YAML PARSER (MINIMAL) =====
+function parseYAML(text) {
+  const obj = {};
+  let current = obj;
+  text.split("\n").forEach(line => {
+    if (!line.trim() || line.includes("#")) return;
+    const [k, v] = line.split(":").map(s => s.trim());
+    if (!v) {
+      current[k] = {};
+      current = current[k];
+    } else {
+      current[k] = v;
+    }
   });
+  return obj;
+}
 
-// RENDER SRA ELEMENTS
+// ===== LOAD CONFIG =====
+fetch("config.yml")
+  .then(r => r.text())
+  .then(parseYAML)
+  .then(cfg => loadSRA(cfg.sra.render.entry));
+
+// ===== LOAD SRA =====
+function loadSRA(file) {
+  fetch(file)
+    .then(r => r.text())
+    .then(text => {
+      const xml = new DOMParser().parseFromString(text, "text/xml");
+      const app = document.getElementById("app");
+      app.innerHTML = "";
+
+      const bg = xml.querySelector("background");
+      if (bg) {
+        document.body.style.background = bg.getAttribute("color");
+        document.body.style.color = bg.getAttribute("textColor");
+      }
+
+      render(xml.querySelector("screen"), app);
+    });
+}
+
+// ===== RENDER ENGINE =====
 function render(node, parent) {
-  if (!node) return;
-
   node.childNodes.forEach(el => {
     if (el.nodeType !== 1) return;
 
-    // COLUMN
     if (el.tagName === "column") {
-      const div = document.createElement("div");
-      div.className = "column";
-      parent.appendChild(div);
-      render(el, div);
+      const d = document.createElement("div");
+      d.className = "column";
+      parent.appendChild(d);
+      render(el, d);
     }
 
-    // TEXT
     if (el.tagName === "text") {
       const p = document.createElement("p");
       p.textContent = el.getAttribute("value");
+      const c = el.getAttribute("color");
+      if (c) p.style.color = c;
       parent.appendChild(p);
     }
 
-    // BUTTON
     if (el.tagName === "button") {
-      const btn = document.createElement("button");
-      btn.textContent = el.getAttribute("text");
-      parent.appendChild(btn);
+      const b = document.createElement("button");
+      b.textContent = el.getAttribute("text");
+      parent.appendChild(b);
+    }
+
+    if (el.tagName === "clock") {
+      const c = document.createElement("div");
+      c.className = "clock";
+      parent.appendChild(c);
+
+      const sec = el.getAttribute("showSeconds") === "true";
+      setInterval(() => {
+        c.textContent = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: sec ? "2-digit" : undefined
+        });
+      }, 1000);
     }
   });
 }
