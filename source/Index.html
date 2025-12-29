@@ -130,6 +130,18 @@ function render(node,parent){
       parent.appendChild(b);
     }
 
+    if (el.tagName === "image") {
+  const img = document.createElement("img");
+  img.src = el.getAttribute("src");
+  img.style.maxWidth = "100%";
+
+  img.onerror = () => {
+    img.src = "../ImagesDemo/Blank.png";
+  };
+
+  parent.appendChild(img);
+    }
+
     if(el.tagName==="clock"){
       const c=document.createElement("div");
       c.className="clock";
