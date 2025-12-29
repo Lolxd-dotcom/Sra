@@ -1,13 +1,25 @@
-sra:
-  render:
-    entry: "*"
-    allowDynamicLoad: true
+sra_engine:
+  version: "1.0"
+  
+  # Validation Rules
+  validation:
+    required_root: "sra"            # The engine must find <sra> in the XML
+    valid_extensions:               # Allowed file types
+      - ".sra"
+      - ".sral"
+    strict_mode: true               # If true, stop rendering on any XML error
 
-  debug:
-    enabled: true
-    showRenderUI: true
+  # Routing & Fallback Logic
+  routing:
+    entry: "*"               # Default file
+    allow_dynamic_load: true        # Allow ?sra= filename in URL
+    
+    # The Error Handler
+    on_load_fail:
+      action: "render_fallback"
+      fallback_path: "../DeveloperDemo/404.sra"
+      log_error: true
 
-  ui:
-    font:
-      family: sans-serif
-      size: 16
+  # Asset Defaults
+  assets:
+    image_fallback: "../ImagesDemo/Blank.png"
