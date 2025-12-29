@@ -1,241 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>SRA Runtime</title>
-
-<style>
-body {
-  margin: 0;
-  font-family: sans-serif;
-}
-
-#debugUI {
-  padding: 10px;
-  background: #111;
-  color: #fff;
-}
-
-#debugUI input {
-  width: 70%;
-  padding: 6px;
-}
-
-#debugUI button {
-  padding: 6px;
-}
-
-#app {
-  padding: 16px;
-}
-
-.column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-button {
-  padding: 12px;
-  font-size: 16px;
-}
-
-.clock {
-  font-size: 26px;
-  font-weight: bold;
-}
-
-img, object {
-  max-width: 100%;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SRA Runtime</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <style>
+        :root { --primary: #38bdf8; --bg: #0f172a; --text: #f8fafc; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; }
+        #sra-root { min-height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Basic Element Styling */
+        .sra-column { display: flex; flex-direction: column; gap: 1rem; padding: 20px; align-items: center; }
+        .sra-text { margin: 5px 0; line-height: 1.5; }
+        .sra-button { padding: 12px 24px; background: var(--primary); border: none; border-radius: 8px; color: #000; font-weight: bold; cursor: pointer; }
+        .sra-clock { font-family: monospace; font-size: 1.5rem; color: var(--primary); }
+        img, object { max-width: 100%; border-radius: 8px; }
+        
+        /* Debug UI */
+        #sra-debug-bar { position: fixed; top: 0; width: 100%; background: rgba(0,0,0,0.8); padding: 5px; font-size: 10px; color: #ccc; z-index: 999; display: none; }
+    </style>
 </head>
 <body>
+    <div id="sra-debug-bar">SRA Engine Active</div>
+    <div id="sra-root"></div>
 
-<div id="debugUI" style="display:none;">
-  <input id="sraPath" placeholder="Enter any .sra file path">
-  <button onclick="debugLoad()">Render</button>
-</div>
+    <script>
+        const root = document.getElementById('sra-root');
+        const debugBar = document.getElementById('sra-debug-bar');
 
-<div id="app">Loading SRA…</div>
-
-<script>
-// =====================
-// MINIMAL YAML PARSER
-// =====================
-function parseYAML(text) {
-  const obj = {};
-  let current = obj;
-  text.split("\n").forEach(line => {
-    if (!line.trim() || line.trim().startsWith("#")) return;
-    const [k, v] = line.split(":").map(s => s.trim());
-    if (!v) {
-      current[k] = {};
-      current = current[k];
-    } else {
-      current[k] = v;
-    }
-  });
-  return obj;
-}
-
-// =====================
-// URL PARAM HANDLER
-// =====================
-function getSRAFromURL() {
-  const p = new URLSearchParams(location.search);
-  return p.get("sra");
-}
-
-// =====================
-// LOAD CONFIG
-// =====================
-fetch("config.yml")
-  .then(r => r.text())
-  .then(parseYAML)
-  .then(cfg => {
-    window.SRA_CONFIG = cfg;
-
-    if (cfg.sra.debug?.enabled && cfg.sra.debug?.showRenderUI) {
-      document.getElementById("debugUI").style.display = "block";
-    }
-
-    const entry = cfg.sra.render.entry;
-    const urlSRA = getSRAFromURL();
-
-    if (entry === "*" && urlSRA) {
-      loadSRA(urlSRA);
-    } else if (entry !== "*") {
-      loadSRA(entry);
-    }
-  });
-
-// =====================
-// DEBUG LOAD
-// =====================
-function debugLoad() {
-  const path = document.getElementById("sraPath").value.trim();
-  if (path) loadSRA(path);
-}
-
-// =====================
-// LOAD SRA WITH 404 FALLBACK
-// =====================
-function loadSRA(file) {
-  fetch(file)
-    .then(r => {
-      if (!r.ok) throw new Error("SRA not found");
-      return r.text();
-    })
-    .then(text => {
-      const xml = new DOMParser().parseFromString(text, "text/xml");
-      if (xml.querySelector("parsererror")) throw new Error("Invalid XML");
-      renderSRA(xml);
-    })
-    .catch(() => {
-      fetch("../DeveloperDemo/404.sra")
-        .then(r => r.text())
-        .then(text => {
-          const xml = new DOMParser().parseFromString(text, "text/xml");
-          renderSRA(xml);
-        });
-    });
-}
-
-// =====================
-// RENDER ROOT
-// =====================
-function renderSRA(xml) {
-  const app = document.getElementById("app");
-  app.innerHTML = "";
-
-  const bg = xml.querySelector("background");
-  if (bg) {
-    document.body.style.background = bg.getAttribute("color") || "#000";
-    document.body.style.color = bg.getAttribute("textColor") || "#fff";
-  }
-
-  const screen = xml.querySelector("screen");
-  if (screen) render(screen, app);
-}
-
-// =====================
-// IMAGE FALLBACK
-// =====================
-function createFallbackImage() {
-  const img = document.createElement("img");
-  img.src = "../ImagesDemo/Blank.png";
-  img.style.maxWidth = "100%";
-  return img;
-}
-
-// =====================
-// RENDER ENGINE
-// =====================
-function render(node, parent) {
-  node.childNodes.forEach(el => {
-    if (el.nodeType !== 1) return;
-
-    if (el.tagName === "column") {
-      const d = document.createElement("div");
-      d.className = "column";
-      parent.appendChild(d);
-      render(el, d);
-    }
-
-    if (el.tagName === "text") {
-      const p = document.createElement("p");
-      p.textContent = el.getAttribute("value");
-      const c = el.getAttribute("color");
-      if (c) p.style.color = c;
-      parent.appendChild(p);
-    }
-
-    if (el.tagName === "button") {
-      const b = document.createElement("button");
-      b.textContent = el.getAttribute("text");
-      parent.appendChild(b);
-    }
-
-    if (el.tagName === "clock") {
-      const c = document.createElement("div");
-      c.className = "clock";
-      parent.appendChild(c);
-
-      const sec = el.getAttribute("showSeconds") === "true";
-      setInterval(() => {
-        c.textContent = new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: sec ? "2-digit" : undefined
-        });
-      }, 1000);
-    }
-
-    if (el.tagName === "image") {
-      const src = el.getAttribute("src");
-      const isSVG = src && src.toLowerCase().endsWith(".svg");
-
-      if (isSVG) {
-        const obj = document.createElement("object");
-        obj.data = src;
-        obj.type = "image/svg+xml";
-        obj.onerror = () => {
-          obj.replaceWith(createFallbackImage());
+        const SRA_HANDLERS = {
+            'background': (el) => {
+                if (el.getAttribute('color')) document.body.style.backgroundColor = el.getAttribute('color');
+                if (el.getAttribute('textColor')) document.body.style.color = el.getAttribute('textColor');
+            },
+            'column': () => {
+                const div = document.createElement('div');
+                div.className = 'sra-column';
+                return div;
+            },
+            'text': (el) => {
+                const p = document.createElement('p');
+                p.className = 'sra-text';
+                p.textContent = el.getAttribute('value');
+                if (el.getAttribute('color')) p.style.color = el.getAttribute('color');
+                return p;
+            },
+            'button': (el) => {
+                const btn = document.createElement('button');
+                btn.className = 'sra-button';
+                btn.textContent = el.getAttribute('text');
+                return btn;
+            },
+            'clock': (el) => {
+                const span = document.createElement('span');
+                span.className = 'sra-clock';
+                const is24h = el.getAttribute('format') === '24h';
+                const update = () => {
+                    span.textContent = new Date().toLocaleTimeString([], { hour12: !is24h });
+                };
+                setInterval(update, 1000);
+                update();
+                return span;
+            },
+            'image': (el, config) => {
+                const src = el.getAttribute('src');
+                const fallback = config.sra_engine.paths.imageFallback;
+                if (src.endsWith('.svg')) {
+                    const obj = document.createElement('object');
+                    obj.data = src;
+                    obj.type = "image/svg+xml";
+                    obj.onerror = () => obj.data = fallback;
+                    return obj;
+                }
+                const img = document.createElement('img');
+                img.src = src;
+                img.onerror = () => img.src = fallback;
+                return img;
+            }
         };
-        parent.appendChild(obj);
-      } else {
-        const img = document.createElement("img");
-        img.src = src;
-        img.onerror = () => {
-          img.src = "../ImagesDemo/Blank.png";
-        };
-        parent.appendChild(img);
-      }
-    }
-  });
-}
-</script>
 
+        async function init() {
+            try {
+                // 1. Load Config
+                const configResp = await fetch('config.yml');
+                const configText = await configResp.text();
+                const config = jsyaml.load(configText);
+
+                if (config.sra_engine.debug.enabled) debugBar.style.display = 'block';
+
+                // 2. Determine Target File
+                const params = new URLSearchParams(window.location.search);
+                let target = (config.sra_engine.render.allowDynamicLoad && params.get('sra')) 
+                             ? params.get('sra') 
+                             : config.sra_engine.render.entry;
+
+                // 3. Validation and Loading
+                await loadSRA(target, config);
+
+            } catch (err) {
+                console.error("Critical Boot Error:", err);
+            }
+        }
+
+        async function loadSRA(filePath, config) {
+            try {
+                // Check extension
+                const isValidExt = config.sra_engine.render.validExtensions.some(ext => filePath.endsWith(ext));
+                if (!isValidExt) throw new Error("Invalid Extension");
+
+                const resp = await fetch(filePath);
+                if (!resp.ok) throw new Error("File Not Found");
+
+                const xmlText = await resp.text();
+                const xmlDoc = new DOMParser().parseFromString(xmlText, "text/xml");
+
+                // Verify Root Tag
+                if (xmlDoc.documentElement.tagName !== config.sra_engine.render.requiredRoot) {
+                    throw new Error("Invalid SRA Signature");
+                }
+
+                render(xmlDoc.documentElement, config);
+                debugBar.textContent = `SRA Rendered: ${filePath}`;
+
+            } catch (err) {
+                console.warn(`SRA Load Failed [${filePath}]: ${err.message}`);
+                // Fallback to 404
+                const fallbackResp = await fetch(config.sra_engine.paths.errorFallback);
+                const fallbackText = await fallbackResp.text();
+                const fallbackDoc = new DOMParser().parseFromString(fallbackText, "text/xml");
+                render(fallbackDoc.documentElement, config);
+            }
+        }
+
+        function render(xmlNode, config) {
+            root.innerHTML = '';
+            const traverse = (node, parent) => {
+                for (let child of node.children) {
+                    const handler = SRA_HANDLERS[child.tagName.toLowerCase()];
+                    if (handler) {
+                        const htmlEl = handler(child, config);
+                        if (htmlEl) {
+                            parent.appendChild(htmlEl);
+                            if (child.children.length > 0) traverse(child, htmlEl);
+                        }
+                    } else {
+                        // Basic support for structural containers like <screen>
+                        if (child.children.length > 0) traverse(child, parent);
+                    }
+                }
+            };
+            traverse(xmlNode, root);
+        }
+
+        init();
+    </script>
 </body>
 </html>
