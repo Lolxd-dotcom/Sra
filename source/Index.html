@@ -5,136 +5,142 @@
 <title>SRA Runtime</title>
 
 <style>
-body {
-  margin: 0;
-  font-family: sans-serif;
-}
-
-#app {
-  padding: 16px;
-}
-
-.column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-button {
-  padding: 12px;
-  font-size: 16px;
-}
-
-.clock {
-  font-size: 26px;
-  font-weight: bold;
-}
+body { margin:0; font-family:sans-serif; }
+#debugUI { padding:10px; background:#111; color:#fff; }
+#debugUI input { width:70%; padding:6px; }
+#debugUI button { padding:6px; }
+#app { padding:16px; }
+.column { display:flex; flex-direction:column; gap:12px; }
+button { padding:12px; font-size:16px; }
+.clock { font-size:26px; font-weight:bold; }
 </style>
 </head>
 <body>
 
+<div id="debugUI" style="display:none;">
+  <input id="sraPath" placeholder="Enter any .sra file path">
+  <button onclick="debugLoad()">Render</button>
+</div>
+
 <div id="app">Loading SRA…</div>
 
 <script>
-// ===== MINIMAL YAML PARSER =====
-function parseYAML(text) {
-  const obj = {};
-  let current = obj;
-  text.split("\n").forEach(line => {
-    if (!line.trim() || line.trim().startsWith("#")) return;
-    const [k, v] = line.split(":").map(s => s.trim());
-    if (!v) {
-      current[k] = {};
-      current = current[k];
-    } else {
-      current[k] = v;
-    }
+// ===== YAML PARSER =====
+function parseYAML(text){
+  const obj={}; let cur=obj;
+  text.split("\n").forEach(l=>{
+    if(!l.trim()||l.startsWith("#"))return;
+    const[k,v]=l.split(":").map(s=>s.trim());
+    if(!v){cur[k]={};cur=cur[k];}
+    else cur[k]=v;
   });
   return obj;
 }
 
+// ===== GET URL PARAM =====
+function getSRAFromURL(){
+  const p=new URLSearchParams(location.search);
+  return p.get("sra");
+}
+
 // ===== LOAD CONFIG =====
 fetch("config.yml")
-  .then(r => r.text())
-  .then(parseYAML)
-  .then(cfg => loadSRA(cfg.sra.render.entry));
+.then(r=>r.text())
+.then(parseYAML)
+.then(cfg=>{
+  window.SRA_CONFIG=cfg;
 
-// ===== LOAD SRA WITH FALLBACK =====
-function loadSRA(file) {
+  if(cfg.sra.debug?.enabled && cfg.sra.debug?.showRenderUI){
+    document.getElementById("debugUI").style.display="block";
+  }
+
+  const entry=cfg.sra.render.entry;
+  const urlSRA=getSRAFromURL();
+
+  if(entry==="*" && urlSRA){
+    loadSRA(urlSRA);
+  } else if(entry!=="*"){
+    loadSRA(entry);
+  }
+});
+
+// ===== DEBUG LOAD =====
+function debugLoad(){
+  const path=document.getElementById("sraPath").value.trim();
+  if(path) loadSRA(path);
+}
+
+// ===== LOAD SRA WITH 404 FALLBACK =====
+function loadSRA(file){
   fetch(file)
-    .then(r => {
-      if (!r.ok) throw new Error("SRA not found");
-      return r.text();
-    })
-    .then(text => {
-      const xml = new DOMParser().parseFromString(text, "text/xml");
-      if (xml.querySelector("parsererror")) throw new Error("Invalid XML");
+  .then(r=>{ if(!r.ok) throw 0; return r.text(); })
+  .then(t=>{
+    const xml=new DOMParser().parseFromString(t,"text/xml");
+    if(xml.querySelector("parsererror")) throw 0;
+    renderSRA(xml);
+  })
+  .catch(()=>{
+    fetch("../DeveloperDemo/404.sra")
+    .then(r=>r.text())
+    .then(t=>{
+      const xml=new DOMParser().parseFromString(t,"text/xml");
       renderSRA(xml);
-    })
-    .catch(() => {
-      fetch("../DeveloperDemo/404.sra")
-        .then(r => r.text())
-        .then(text => {
-          const xml = new DOMParser().parseFromString(text, "text/xml");
-          renderSRA(xml);
-        });
     });
+  });
 }
 
 // ===== RENDER ROOT =====
-function renderSRA(xml) {
-  const app = document.getElementById("app");
-  app.innerHTML = "";
+function renderSRA(xml){
+  const app=document.getElementById("app");
+  app.innerHTML="";
 
-  const bg = xml.querySelector("background");
-  if (bg) {
-    document.body.style.background = bg.getAttribute("color") || "#000";
-    document.body.style.color = bg.getAttribute("textColor") || "#fff";
+  const bg=xml.querySelector("background");
+  if(bg){
+    document.body.style.background=bg.getAttribute("color")||"#000";
+    document.body.style.color=bg.getAttribute("textColor")||"#fff";
   }
 
-  const screen = xml.querySelector("screen");
-  if (screen) render(screen, app);
+  const screen=xml.querySelector("screen");
+  if(screen) render(screen,app);
 }
 
 // ===== RENDER ENGINE =====
-function render(node, parent) {
-  node.childNodes.forEach(el => {
-    if (el.nodeType !== 1) return;
+function render(node,parent){
+  node.childNodes.forEach(el=>{
+    if(el.nodeType!==1)return;
 
-    if (el.tagName === "column") {
-      const d = document.createElement("div");
-      d.className = "column";
+    if(el.tagName==="column"){
+      const d=document.createElement("div");
+      d.className="column";
       parent.appendChild(d);
-      render(el, d);
+      render(el,d);
     }
 
-    if (el.tagName === "text") {
-      const p = document.createElement("p");
-      p.textContent = el.getAttribute("value");
-      const c = el.getAttribute("color");
-      if (c) p.style.color = c;
+    if(el.tagName==="text"){
+      const p=document.createElement("p");
+      p.textContent=el.getAttribute("value");
+      const c=el.getAttribute("color");
+      if(c) p.style.color=c;
       parent.appendChild(p);
     }
 
-    if (el.tagName === "button") {
-      const b = document.createElement("button");
-      b.textContent = el.getAttribute("text");
+    if(el.tagName==="button"){
+      const b=document.createElement("button");
+      b.textContent=el.getAttribute("text");
       parent.appendChild(b);
     }
 
-    if (el.tagName === "clock") {
-      const c = document.createElement("div");
-      c.className = "clock";
+    if(el.tagName==="clock"){
+      const c=document.createElement("div");
+      c.className="clock";
       parent.appendChild(c);
-
-      const sec = el.getAttribute("showSeconds") === "true";
-      setInterval(() => {
-        c.textContent = new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: sec ? "2-digit" : undefined
+      const sec=el.getAttribute("showSeconds")==="true";
+      setInterval(()=>{
+        c.textContent=new Date().toLocaleTimeString([],{
+          hour:"2-digit",minute:"2-digit",
+          second:sec?"2-digit":undefined
         });
-      }, 1000);
+      },1000);
     }
   });
 }
