@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SRA Runtime</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f2f2f2;
+}
+
+#app {
+  padding: 16px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+button {
+  padding: 12px;
+  font-size: 16px;
+}
+</style>
+</head>
+<body>
+
+<div id="app">Loading Demo.sra…</div>
+
+<script>
+// ==========================
+// SRA HTML RUNTIME
+// ==========================
+
+// 🔗 CONNECTED FILE
+const SRA_FILE = "Demo.sra";
+
+// LOAD THE SRA FILE
+fetch(SRA_FILE)
+  .then(response => response.text())
+  .then(sraText => {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(sraText, "text/xml");
+
+    // Set app title
+    const appName = xml.querySelector("app > name");
+    if (appName) document.title = appName.textContent;
+
+    const screen = xml.querySelector("screen");
+    const root = document.getElementById("app");
+    root.innerHTML = "";
+
+    render(screen, root);
+  })
+  .catch(error => {
+    document.getElementById("app").textContent =
+      "Error: Could not load Demo.sra";
+  });
+
+// RENDER SRA ELEMENTS
+function render(node, parent) {
+  if (!node) return;
+
+  node.childNodes.forEach(el => {
+    if (el.nodeType !== 1) return;
+
+    // COLUMN
+    if (el.tagName === "column") {
+      const div = document.createElement("div");
+      div.className = "column";
+      parent.appendChild(div);
+      render(el, div);
+    }
+
+    // TEXT
+    if (el.tagName === "text") {
+      const p = document.createElement("p");
+      p.textContent = el.getAttribute("value");
+      parent.appendChild(p);
+    }
+
+    // BUTTON
+    if (el.tagName === "button") {
+      const btn = document.createElement("button");
+      btn.textContent = el.getAttribute("text");
+      parent.appendChild(btn);
+    }
+  });
+}
+</script>
+
+</body>
+</html>
