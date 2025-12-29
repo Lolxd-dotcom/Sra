@@ -36,12 +36,12 @@ button {
 <div id="app">Loading SRA…</div>
 
 <script>
-// ===== YAML PARSER (MINIMAL) =====
+// ===== MINIMAL YAML PARSER =====
 function parseYAML(text) {
   const obj = {};
   let current = obj;
   text.split("\n").forEach(line => {
-    if (!line.trim() || line.includes("#")) return;
+    if (!line.trim() || line.trim().startsWith("#")) return;
     const [k, v] = line.split(":").map(s => s.trim());
     if (!v) {
       current[k] = {};
@@ -59,23 +59,41 @@ fetch("config.yml")
   .then(parseYAML)
   .then(cfg => loadSRA(cfg.sra.render.entry));
 
-// ===== LOAD SRA =====
+// ===== LOAD SRA WITH FALLBACK =====
 function loadSRA(file) {
   fetch(file)
-    .then(r => r.text())
+    .then(r => {
+      if (!r.ok) throw new Error("SRA not found");
+      return r.text();
+    })
     .then(text => {
       const xml = new DOMParser().parseFromString(text, "text/xml");
-      const app = document.getElementById("app");
-      app.innerHTML = "";
-
-      const bg = xml.querySelector("background");
-      if (bg) {
-        document.body.style.background = bg.getAttribute("color");
-        document.body.style.color = bg.getAttribute("textColor");
-      }
-
-      render(xml.querySelector("screen"), app);
+      if (xml.querySelector("parsererror")) throw new Error("Invalid XML");
+      renderSRA(xml);
+    })
+    .catch(() => {
+      fetch("../DeveloperDemo/404.sra")
+        .then(r => r.text())
+        .then(text => {
+          const xml = new DOMParser().parseFromString(text, "text/xml");
+          renderSRA(xml);
+        });
     });
+}
+
+// ===== RENDER ROOT =====
+function renderSRA(xml) {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  const bg = xml.querySelector("background");
+  if (bg) {
+    document.body.style.background = bg.getAttribute("color") || "#000";
+    document.body.style.color = bg.getAttribute("textColor") || "#fff";
+  }
+
+  const screen = xml.querySelector("screen");
+  if (screen) render(screen, app);
 }
 
 // ===== RENDER ENGINE =====
